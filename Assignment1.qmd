@@ -1,0 +1,473 @@
+---
+title: "STATS - 720 Homework-1"
+author: "Rajitha Senanayake (Student number: 400545853)"
+format: pdf
+execute: 
+  warning: False
+  message: False
+editor: visual
+---
+
+## Load libraries
+
+```{r}
+library(dplyr)
+library(readr)
+library(ggplot2)
+library(reshape2)
+library(moments)
+library(lmtest)
+library(dotwhisker)
+library(effects)
+library(MASS)
+library(caret)
+```
+
+# Question 1
+
+#### Load the dataset
+
+```{r}
+#| message: false
+house_prices <- read_csv("house.csv")
+dim(house_prices)
+```
+
+#### Description on the variables
+
+-   bedroom_count: Number of bedrooms
+-   net_sqm: Total usable area in square kilo meters
+-   center_distance: Distance to the nearest downtown area of a city in meters
+-   metro_distance: Distance to the nearest metro or subway station meters
+-   floor: The level or story of the housing unit within the building
+-   age: The age of the property in years
+-   price: Price of the house in dollars
+
+## Question 1 - a
+
+The general rule of thumb is that number of predictor variables \< m/15. Where 'm' is the limiting sample size.
+
+```{r}
+# Get the allowed number of predictor variables
+allowedVariables = nrow(house_prices)/15
+print(allowedVariables)
+```
+
+Check the correlation between the variables in the dataset.
+
+```{r}
+# Create correlation matrix
+cor_mat <- round(cor(house_prices),2)
+
+# Unpivot the matrix
+unpivot_cor <- melt(cor_mat)
+
+# Create a heatmap
+ggplot(
+  data = unpivot_cor, aes(x=Var1, y=Var2, fill=value)) +
+  geom_tile() + 
+  geom_text(
+    aes(Var2, Var1, label = value),color = "white", size = 4) +
+  theme(axis.text.x = element_text(angle=60, hjust=1)) +
+  labs(title = "Correlation matrix heatmap")
+```
+
+Check the pair plot to visualize the relationship between the variables
+
+```{r}
+pairs(house_prices, pch=19, col='orange', lower.panel=panel.smooth)
+```
+
+There is a significant positive correlation between 'bedroom_count' and 'net_sqm'. The 'net_sqm' is more correlated with price than 'bedroom_count', hence bedroom_count will not be used in the model to avoid multicollinearity.
+
+The predictor variables used in the model listed below:
+
+-   net_sqm
+-   center_distance
+-   metro_distance
+-   floor
+-   age
+
+## Question 1 - b
+
+Units of the independent variables
+
+-   net_sqm - Square meters
+-   center_distance - Meters
+-   metro_distance - Meters
+-   floor - Discrete count (units)
+-   age - years
+
+Unit of the response variable
+
+-   price - dollars
+
+reasonable threshold for a small change: net_sqm - 0.5 sqm center_distance - 0.10 meters metro_distance - 0.10 meters floor - 1 unit age - 1 year
+
+## Question 1 - c Fitting the model
+
+Since the independent variables are in different scales, normalize the numerical variables using min-max scaling
+
+```{r}
+# Initialize the min max scaling
+normalize <- preProcess(
+  house_prices[,2:6],  method=c("range")
+  )
+
+# Normalizing the variables
+norm_house_prices <- predict(normalize, house_prices[,2:6])
+
+# Add the price column
+norm_house_prices <- cbind(norm_house_prices,house_prices[c("price")])
+```
+
+Split the dataset into train and test sets
+
+```{r}
+# Setting the seed to reproduce the same result
+set.seed(10)
+
+rowNumber <- sample(1:nrow(norm_house_prices), 0.8*nrow(norm_house_prices))
+train <- norm_house_prices[rowNumber,]
+test <- norm_house_prices[-rowNumber,]
+dim(train)
+dim(test)
+```
+
+Fit the model for train data
+
+```{r}
+model1 <- lm(price~., data = train)
+summary(model1)
+```
+
+## Question 1 - d
+
+-   From the f-statistic we can say that there's a statistically significant relationship between the response variable and the group of independent variables used in the model.
+
+-   Model summary also depicts that all independent variables in the model are statistically significant.
+
+-   Multiple R squared value of 0.7055 indicates that the model 70.55% of the variation is captured by the model
+
+Graphical Diagnostics
+
+```{r}
+plot(model1)
+```
+
+-   Residual vs Fitted values: The scatter points should be random and should not have any pattern. For the above plot the trend line is almost at zero. The observations are not scattered evenly which suggests there is heteroscedasticity in the residuals.
+
+-   Normal Q-Q plot: This is to check whether the residuals are normally distributed, ideally the plot should be on the dotted line. In the above plot, most of the points are on the line except at the start and towards the end, which indicated the residuals are normally distributed.
+
+-   Scale-Location: The trend line is approximately horizontal but there is upward trend implying the presence of heteroscedasticity, but this can be tested using studentized Breusch-Pagan test
+
+-   Residual vs Leverage: This plot helps to identify any influential observations for the model. The above plot does not indicate that there any influential observations in our data
+
+Apply Studentized Breusch-Pagan test to check whether the residuals from the model are homoscedastic.
+
+```{r}
+bptest(model1)
+```
+
+With P value being less than 0.05, we statistically reject the null hypothesis which implies the residuals are not homoscedastic. There is room for improvement in the model.
+
+## Question 1 - e Improving the model
+
+Checking the residuals with each independent variable
+
+```{r}
+# Residual vs net_sqm
+ggplot(train, aes(net_sqm, residuals(model1))) + geom_point() + geom_smooth()
+
+# Residual vs center_distance
+ggplot(train, aes(center_distance, residuals(model1))) + geom_point() + geom_smooth()
+
+# Residual vs metro_distance
+ggplot(train, aes(metro_distance, residuals(model1))) + geom_point() + geom_smooth()
+
+# Residual vs floor
+ggplot(train, aes(floor, residuals(model1))) + geom_point() + geom_smooth()
+
+#Residual vs age
+ggplot(train, aes(age, residuals(model1))) + geom_point() + geom_smooth() 
+
+
+```
+
+From the above plots we can see a non linear pattern in the residuals vs net_sqm.
+
+To capture any non linear relationships, add squared terms of each independent variable to the model, then finally remove any insignificant independent variables.
+
+```{r}
+model2 <- lm(
+  price ~  net_sqm + center_distance +
+    metro_distance + floor + age  +
+    I(net_sqm^2) + I(center_distance^2) + 
+    I(metro_distance^2) + I(floor^2) + I(age^2),
+    data = train )
+
+summary(model2)
+```
+
+Remove the statistically insignificant variables from the above model. Terms that will be removed from the model:
+
+-   floor
+-   metro_distance\^2
+-   age\^2
+
+```{r}
+finalModel <- update(
+  model2, ~.-floor-I(metro_distance^2)-I(age^2)
+  )
+summary(finalModel)
+```
+
+Residual plots of the final model
+
+```{r}
+plot(finalModel)
+```
+
+The residual vs fitted plot has the residuals evenly spread around the 0 line, but the spread has grown wider with the increase in fitted values. This implies the residuals are not fully homoscedastic as there is slight pattern.
+
+In the normal Q-Q plot, most observations fall along the line except at the beginning and the end.
+
+The scale-location plot also shows a slight pattern implying heteroscedasticity.
+
+We can test for homoscedasticity using Studentized Breusch-Pagan test
+
+```{r}
+bptest(model1)
+```
+
+The BT-test results rejects the null hypothesis, so statistically the residuals violates homoscedasitic assumption.
+
+The final model also has room for improvement but the model has a significant F-statistic, implying there is relationship between the response variable and set of selected independent variables.
+
+The multiple R\^2 is 71.41% The adjusted R\^2 of the model is 71.35%
+
+Testing the model for unseen data
+
+```{r}
+predictions <- predict(finalModel, newdata = test)
+
+# Calculate root means square error (RMSE)
+MAPE = sum(
+  abs(predictions-test$price)/test$price
+  )/length(test$price)
+  
+
+cat("MAPE: ", MAPE)
+```
+
+```{r}
+plot(test$price, predictions)
+```
+
+From the above plot and the MAPE value of 0.16%, we can conclude that the model works pretty well with unseen data for predictions.
+
+## Question 1 - f
+
+Dot-whisker plot to visualize the significance of the model parameters.
+
+```{r}
+dwplot(finalModel, vline = geom_vline(
+           xintercept = 0,
+           colour = "black",
+           linetype = 3
+       ))
+```
+
+From the coefficient plot, we can see that all the parameter estimates are significant (Confidence intervals do not include 0).
+
+All the independent variables were normalized using min-max scaler in this model. The reason for this was the the ranges and the units of the independent variables were significantly different hence the model coefficients would have given more weight for some variables compared to others if we go we would have gone with raw data.
+
+Even though the data was scaled using min-max scale, the data was not centered (standardized). Standardization works better when the variables follow a Gaussian distribution, I only wanted to scale the variables to a value between 0-1
+
+Ranges of the independent variables are shown below
+
+```{r}
+range(house_prices$net_sqm)
+range(house_prices$center_distance)
+range(house_prices$metro_distance)
+range(house_prices$floor)
+range(house_prices$age)
+```
+
+## Question 1 - g
+
+Analyzing the effects of each independent variable using the values and the effects plot
+
+```{r}
+effects::allEffects(finalModel)
+```
+
+```{r}
+#| fig-width: 6
+#| fig-height: 3
+plot(allEffects(finalModel))
+```
+
+The center_distance, center_distance\^2, age and net_sqm\^2 has a negative effect on the price all other variables have a positive effect.
+
+## Question 2
+
+Constructing the inverse contrast matrix first, then get the inverse of it.
+
+The order of the levels - after_control, after_impact, before_control, before_impact
+
+```{r}
+inverse_contrast <- matrix(
+  c(
+    # Intercept - average of control and impact during before period
+    0,0,1/2,1/2,
+    # Effect 1 - difference between control and impact during before period
+    0,0,-1,1,
+    # Effect 2 - difference between average of control and impact during before and after period
+    -0.5,-0.5,0.5,0.5,
+    # Effect 3 - difference of difference between before and after period
+    -1,1,1,-1
+    ),
+  nrow = 4,
+  ncol = 4,
+  byrow = TRUE
+)
+
+contrast_matrix <- solve(inverse_contrast)
+print(contrast_matrix)
+```
+
+Creating dummy data to generate model matrices
+
+```{r}
+dummy_data <- data.frame(
+  period = as.factor(
+    c("after","after","before","before")),
+  treatment = as.factor(
+    c("control","impact","control","impact")
+  ),
+  values = c(76,70,43,45)
+)
+```
+
+minimal model matrix can taken from the additive model
+
+```{r}
+model.matrix(~period+treatment, data=dummy_data)
+```
+
+\~period\*treatment
+
+```{r}
+model.matrix(~period*treatment, data=dummy_data)
+```
+
+\~period:treatment
+
+```{r}
+model.matrix(~0+period:treatment, data=dummy_data)
+```
+
+f1\*f2 model gives the following columns in the matrix
+
+-   Intercept
+-   periodbefore
+-   treatmentimpact
+-   periodbefore:treatmentimpact
+
+0+f1:f2 model gives the follwing columns in the matrix (all terms are interactions without the intercept )
+
+-   periodafter:treatmentcontrol
+-   periodbefore:treatmentcontrol
+-   periodafter:treatmentimpact
+-   periodbefore:treatmentimpact
+
+## Question 3
+
+Simulate data
+
+```{r}
+# Function to simulate data
+sim_fun <- function(n, slope, sd, intercept) {
+
+    x <- runif(n)
+    y <- rnorm(n, intercept + slope * (x^2), sd = sd)
+    
+    data.frame(x, y)
+}
+```
+
+```{r}
+between <- function(a, b) {b[1] < a & a < b[2]}
+```
+
+Simulate the modelling
+
+```{r}
+ # Function to simulate the modeling
+run_full_Simulation <- function(times, n, slope, sd, intercept){
+
+  true_slope = c()
+  slope_vec = c()
+  p_value = c()
+  coverage = c()
+  
+    for(count in 1:times){
+      
+    set.seed(9+count)
+      
+    sim_data <- sim_fun(n, slope, sd, intercept)
+    
+    model = lm(y~x, data=sim_data)
+    
+    cov_prob = between(
+      slope, confint(model)[2,]
+    )
+    
+    coverage =c(coverage,cov_prob)
+    true_slope = c(true_slope, slope)
+    slope_vec = c(slope_vec, coef(model)[2])
+    p_value = c(p_value, coef(summary(model))[2, "Pr(>|t|)"])
+    
+    }
+  
+  data.frame(slope_vec,true_slope,p_value,coverage)
+}
+```
+
+```{r}
+model_simulations <- run_full_Simulation(100,100,5,1,3)
+```
+
+calculating bias,RMSE,power and coverage probability
+
+```{r}
+bias <- mean(
+  model_simulations$slope_vec-model_simulations$true_slope)
+
+RMSE <- sqrt(
+  mean(
+  (model_simulations$slope_vec-model_simulations$true_slope)^2
+    )
+  )
+
+alpha = 0.05
+
+power <- mean(model_simulations$p_value < alpha)
+
+coverage_prob <- sum(model_simulations$coverage)/nrow(model_simulations)
+```
+
+Enter the measures in a datafram
+
+```{r}
+
+measures <- data.frame(
+  bias,
+  RMSE,
+  power,
+  coverage_prob
+)
+
+measures
+```
