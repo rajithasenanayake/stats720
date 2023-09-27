@@ -244,7 +244,7 @@ The BT-test results rejects the null hypothesis, so statistically the residuals 
 
 The final model also has room for improvement but the model has a significant F-statistic, implying there is relationship between the response variable and set of selected independent variables.
 
-The multiple R\^2 is 71.41% The adjusted R\^2 of the model is 71.35%
+The multiple R\^2 is 71.41% The adjusted R\^2 of the model is 71.35%.
 
 Testing the model for unseen data
 
