@@ -324,7 +324,7 @@ inverse_contrast <- matrix(
     # Effect 1 - difference between control and impact during before period
     0,0,-1,1,
     # Effect 2 - difference between average of control and impact during before and after period
-    -0.5,-0.5,0.5,0.5,
+    0.5,0.5,-0.5,-0.5,
     # Effect 3 - difference of difference between before and after period
     -1,1,1,-1
     ),
