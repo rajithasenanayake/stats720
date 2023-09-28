@@ -21,6 +21,7 @@ library(dotwhisker)
 library(effects)
 library(MASS)
 library(caret)
+library(car)
 ```
 
 # Question 1
@@ -71,6 +72,10 @@ ggplot(
   theme(axis.text.x = element_text(angle=60, hjust=1)) +
   labs(title = "Correlation matrix heatmap")
 ```
+Check for VIF values to identify multicollinearity
+```{r}
+car::vif(lm(price ~ ., data=house_prices))
+```
 
 Check the pair plot to visualize the relationship between the variables
 
@@ -78,10 +83,11 @@ Check the pair plot to visualize the relationship between the variables
 pairs(house_prices, pch=19, col='orange', lower.panel=panel.smooth)
 ```
 
-There is a significant positive correlation between 'bedroom_count' and 'net_sqm'. The 'net_sqm' is more correlated with price than 'bedroom_count', hence bedroom_count will not be used in the model to avoid multicollinearity.
+There is a high positive correlation between 'bedroom_count' and 'net_sqm', but the VIF values are all less than 5, hence all variables will be selected as there is no multicollinearity
 
 The predictor variables used in the model listed below:
 
+-   bedroom_count
 -   net_sqm
 -   center_distance
 -   metro_distance
@@ -92,10 +98,11 @@ The predictor variables used in the model listed below:
 
 Units of the independent variables
 
+-   bedroom_count - Discrete Coun (Units)
 -   net_sqm - Square meters
 -   center_distance - Meters
 -   metro_distance - Meters
--   floor - Discrete count (units)
+-   floor - Discrete count (Units)
 -   age - years
 
 Unit of the response variable
@@ -111,11 +118,11 @@ Since the independent variables are in different scales, normalize the numerical
 ```{r}
 # Initialize the min max scaling
 normalize <- preProcess(
-  house_prices[,2:6],  method=c("range")
+  house_prices[,1:6],  method=c("range")
   )
 
 # Normalizing the variables
-norm_house_prices <- predict(normalize, house_prices[,2:6])
+norm_house_prices <- predict(normalize, house_prices[,1:6])
 
 # Add the price column
 norm_house_prices <- cbind(norm_house_prices,house_prices[c("price")])
@@ -147,7 +154,7 @@ summary(model1)
 
 -   Model summary also depicts that all independent variables in the model are statistically significant.
 
--   Multiple R squared value of 0.7055 indicates that the model 70.55% of the variation is captured by the model
+-   Multiple R squared value of 0.7196 indicates that the model 71.96% of the variation is captured by the model
 
 Graphical Diagnostics
 
@@ -176,6 +183,9 @@ With P value being less than 0.05, we statistically reject the null hypothesis w
 Checking the residuals with each independent variable
 
 ```{r}
+# Residual vs bedroom_count
+ggplot(train, aes(bedroom_count, residuals(model1))) + geom_point() + geom_smooth()
+
 # Residual vs net_sqm
 ggplot(train, aes(net_sqm, residuals(model1))) + geom_point() + geom_smooth()
 
@@ -200,8 +210,8 @@ To capture any non linear relationships, add squared terms of each independent v
 
 ```{r}
 model2 <- lm(
-  price ~  net_sqm + center_distance +
-    metro_distance + floor + age  +
+  price ~ bedroom_count + net_sqm + center_distance +
+    metro_distance + floor + age  + I(bedroom_count^2) +
     I(net_sqm^2) + I(center_distance^2) + 
     I(metro_distance^2) + I(floor^2) + I(age^2),
     data = train )
@@ -211,13 +221,13 @@ summary(model2)
 
 Remove the statistically insignificant variables from the above model. Terms that will be removed from the model:
 
--   floor
+-   bedroom_count
 -   metro_distance\^2
 -   age\^2
 
 ```{r}
 finalModel <- update(
-  model2, ~.-floor-I(metro_distance^2)-I(age^2)
+  model2, ~.-bedroom_count-I(metro_distance^2)-I(age^2)
   )
 summary(finalModel)
 ```
@@ -244,7 +254,7 @@ The BT-test results rejects the null hypothesis, so statistically the residuals 
 
 The final model also has room for improvement but the model has a significant F-statistic, implying there is relationship between the response variable and set of selected independent variables.
 
-The multiple R\^2 is 71.41% The adjusted R\^2 of the model is 71.35%.
+The multiple R\^2 is 72.62% The adjusted R\^2 of the model is 72.54%.
 
 Testing the model for unseen data
 
@@ -264,7 +274,7 @@ cat("MAPE: ", MAPE)
 plot(test$price, predictions)
 ```
 
-From the above plot and the MAPE value of 0.16%, we can conclude that the model works pretty well with unseen data for predictions.
+From the above plot and the MAPE value of 1.5%, we can conclude that the model works pretty well with unseen data for predictions.
 
 ## Question 1 - f
 
@@ -287,6 +297,7 @@ Even though the data was scaled using min-max scale, the data was not centered (
 Ranges of the independent variables are shown below
 
 ```{r}
+range(house_prices$bedroom_count)
 range(house_prices$net_sqm)
 range(house_prices$center_distance)
 range(house_prices$metro_distance)
@@ -308,7 +319,7 @@ effects::allEffects(finalModel)
 plot(allEffects(finalModel))
 ```
 
-The center_distance, center_distance\^2, age and net_sqm\^2 has a negative effect on the price all other variables have a positive effect.
+The center_distance, center_distance\^2, age and net_sqm\^2 have negative effects on the price all other variables have a positive effect.
 
 ## Question 2
 
