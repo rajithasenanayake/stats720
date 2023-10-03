@@ -8,7 +8,11 @@ execute:
 editor: visual
 ---
 
+**BMB**: it's not a good idea to turn off warnings and messages unconditionally (I think that's what `execute` in the YAML does ...?)
+
 ## Load libraries
+
+**BMB**: they're "packages", not "libraries" ...
 
 ```{r}
 library(dplyr)
@@ -83,7 +87,11 @@ Check the pair plot to visualize the relationship between the variables
 pairs(house_prices, pch=19, col='orange', lower.panel=panel.smooth)
 ```
 
+**BMB**: can you actually see anything from this plot? Maybe if it weren't squashed into a PDF?
+
 There is a high positive correlation between 'bedroom_count' and 'net_sqm', but the VIF values are all less than 5, hence all variables will be selected as there is no multicollinearity
+
+**BMB**: why do we care about multicollinearity???? Would you still do this even after the class discussion?  Automatic removal of variables via VIF is generally a bad idea **unless** (1) we are doing a predictive model and (2) we have so many features that we need to remove some at the beginning for computational reasons
 
 The predictor variables used in the model listed below:
 
@@ -130,6 +138,8 @@ norm_house_prices <- cbind(norm_house_prices,house_prices[c("price")])
 
 Split the dataset into train and test sets
 
+**BMB**: why are you splitting into train and test? I never asked you to do this, and this is not specifically a predictive model. By checking the diagnostics you should be able to use corrected within-sample statistics such as adjusted R^2; you don't have to use a hold-out set.
+
 ```{r}
 # Setting the seed to reproduce the same result
 set.seed(10)
@@ -166,6 +176,8 @@ plot(model1)
 
 -   Normal Q-Q plot: This is to check whether the residuals are normally distributed, ideally the plot should be on the dotted line. In the above plot, most of the points are on the line except at the start and towards the end, which indicated the residuals are normally distributed.
 
+**BMB**: first of all, the residuals are **not** normally distributed. They're never normally distributed, no matter what the Q-Q plot or Shapiro-Wilk test (or whatever) say. Second of all, this looks like pretty extreme fat-tailedness to me: it might not matter much for such a large data set, but I would be tempted to try something like robust regression for this.
+
 -   Scale-Location: The trend line is approximately horizontal but there is upward trend implying the presence of heteroscedasticity, but this can be tested using studentized Breusch-Pagan test
 
 -   Residual vs Leverage: This plot helps to identify any influential observations for the model. The above plot does not indicate that there any influential observations in our data
@@ -177,6 +189,8 @@ bptest(model1)
 ```
 
 With P value being less than 0.05, we statistically reject the null hypothesis which implies the residuals are not homoscedastic. There is room for improvement in the model.
+
+**BMB**: we can reject the null hypothesis, but is this amount of heteroscedasticity actually important??
 
 ## Question 1 - e Improving the model
 
@@ -207,6 +221,8 @@ ggplot(train, aes(age, residuals(model1))) + geom_point() + geom_smooth()
 From the above plots we can see a non linear pattern in the residuals vs net_sqm.
 
 To capture any non linear relationships, add squared terms of each independent variable to the model, then finally remove any insignificant independent variables.
+
+**BMB**: why are you removing non-significant variables? This really looks like you're trying to do a predictive model, but in that case you should be using something like a penalized regression with an automated tuning procedure. Remember that every data-driven step you take further invalidates your inferences ...
 
 ```{r}
 model2 <- lm(
@@ -252,6 +268,8 @@ bptest(model1)
 
 The BT-test results rejects the null hypothesis, so statistically the residuals violates homoscedasitic assumption.
 
+**BMB**: This will almost always be rejected with a large data set!
+
 The final model also has room for improvement but the model has a significant F-statistic, implying there is relationship between the response variable and set of selected independent variables.
 
 The multiple R\^2 is 72.62% The adjusted R\^2 of the model is 72.54%.
@@ -290,9 +308,14 @@ dwplot(finalModel, vline = geom_vline(
 
 From the coefficient plot, we can see that all the parameter estimates are significant (Confidence intervals do not include 0).
 
-All the independent variables were normalized using min-max scaler in this model. The reason for this was the the ranges and the units of the independent variables were significantly different hence the model coefficients would have given more weight for some variables compared to others if we go we would have gone with raw data.
+All the independent variables were normalized using min-max scaler in this model. The reason for this was the the ranges and the units of the independent variables were significantly different hence the model coefficients would have given more weight for some variables compared to others if we would have gone with raw data.
+
+**BMB**: OK.
+
 
 Even though the data was scaled using min-max scale, the data was not centered (standardized). Standardization works better when the variables follow a Gaussian distribution, I only wanted to scale the variables to a value between 0-1
+
+**BMB**: "Standardization works better when the variables follow a Gaussian distribution".  What's the support for that statement? Centering would make the squared terms more interpretable ...
 
 Ranges of the independent variables are shown below
 
@@ -320,6 +343,8 @@ plot(allEffects(finalModel))
 ```
 
 The center_distance, center_distance\^2, age and net_sqm\^2 have negative effects on the price all other variables have a positive effect.
+
+**BMB**: you already knew this ...
 
 ## Question 2
 
@@ -434,7 +459,8 @@ run_full_Simulation <- function(times, n, slope, sd, intercept){
     cov_prob = between(
       slope, confint(model)[2,]
     )
-    
+
+    ## BMB: don't grow objects
     coverage =c(coverage,cov_prob)
     true_slope = c(true_slope, slope)
     slope_vec = c(slope_vec, coef(model)[2])
@@ -482,3 +508,7 @@ measures <- data.frame(
 
 measures
 ```
+
+**BMB**: you didn't show any examples for *increasing levels* of violation. The effect of a quadratic vs linear model is small if the range of your x variable is only (0,1)
+
+mark: 8/10
