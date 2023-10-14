@@ -1,0 +1,517 @@
+---
+title: "Assignment 2"
+format: html
+---
+
+## Loading packages
+
+```{r}
+library(ggplot2)
+library(gridExtra)
+library(DHARMa)
+library(performance)
+library(tidyverse)
+library(dotwhisker)
+library(plotly)
+library(bbmle)
+library(fastDummies)
+library(brglm2)
+library(detectseparation)
+library(arm)
+library(broom)
+library(lmtest)
+```
+
+## Question 1
+
+-   Loading the kyphosis data and converting Kyphosis column to a binary factor of 0 and 1s
+
+```{r}
+# Load data
+data("kyphosis", package = "rpart")
+
+# Transforming data
+kyphosis <- transform(
+  kyphosis,
+  Kyphosis = as.numeric(factor(Kyphosis))-1
+  )
+```
+
+### Question 1 a - Description, family and link function
+
+-   Description about the dataset
+
+```{r}
+?rpart::kyphosis
+```
+
+-   The Kyphosis column is a factor with levels 0-absent and 1-present indicating if a kyphosis was present after the surgery
+
+-   The distribution of Y\|X in this case follows a binomial distribution and the link function is 'logit'
+
+- Excluding the target variable, the dataset has 3 more variables (Age, Number and Start). All these 3 variables will be used as predictors for the model. 
+
+### Question 1 b - Plots to view the data
+
+```{r}
+# Checking the age distribution for children with and without kyphosis
+
+boxplot(
+  Age~Kyphosis,
+  data=kyphosis,
+  col = "lightblue",
+  las = 2,
+  xlab = "Kyphosis - absent(0) / present(1)",
+  ylab = "Age in months",
+  main = "Presence of Kyphosis vs Age"
+  )
+```
+
+-   Based on the boxplot, the age range of children who have had spine surgery without kyphosis is wider than the age range of children who do.
+
+-   The distributions of the number of vertebrae involved in the full surgery and at the beginning of the surgery are plotted below.
+
+```{r}
+plt1 <- ggplot(kyphosis, aes(x=factor(Kyphosis), y=Start)) +
+  geom_violin(fill= 'lightblue', trim=FALSE) +
+  labs(
+    title='Presence of kyphosis vs Starting vertebra for surgery',
+    x='Absence / Presence of Kyphosis'
+    )
+
+plt2 <- ggplot(kyphosis, aes(x=factor(Kyphosis), y=Number)) +
+  geom_violin(fill='lightgreen', trim=FALSE) +
+  labs(
+    title='Presence of kyphosis vs Number of vertebra operated',
+    x='Absence / Presence of Kyphosis'
+    )
+
+plt3 <- ggplot(kyphosis, aes(x=Number, y=Start)) +
+  geom_point(aes(col=factor(Kyphosis)))
+
+plot(plt1)
+plot(plt2)
+plot(plt3)
+```
+
+-   From the first plot and the scatter plot, it is visible that if a child has high number of vertebrae operated at the start of the surgery then there is high chance for that child to not have Kyphosis
+
+-   Considering all the plots, the age, starting number of vertebrae and the total vertebrae involved in the surgery overlap regardless of presenece and absence of Kyphosis.
+
+### Question 1 c - Fitting the model
+
+```{r}
+model_1 <- glm(
+  Kyphosis~Age+Start+Number,
+  data=kyphosis,
+  family = binomial(link = "logit")
+  )
+
+summary(model_1)
+```
+
+### Question 1 d - Diagnostic plots
+
+-   Residual plot from base R package
+
+```{r}
+plot(model_1)
+```
+
+-   performance::check_model() diagnostic plots
+
+```{r}
+performance::check_model(model_1)
+```
+
+-   DHARMa diagnostic plots
+
+```{r}
+simulated_residuals <- simulateResiduals(
+  fittedModel = model_1
+  )
+
+plot(simulated_residuals)
+```
+
+-   The base residual plots:
+
+The scale-location plot with standardized pearson residuals can be used to check the fit of the model, ideally the red line should roughly be horizontal, taking it to account this model is not a very good fit.
+
+Normal QQ plot is used to check if the deviance residuals follow a normal distribution, in logistic regression it will not follow a normal distribution unless we have a very large sample of data
+
+Residuals vs Deviance plot is used to check if there are any outliers in the data
+
+-   performance::check_model plots:
+
+The QQ plot and the influential observation points are similar to the of the plots from the base R package.
+
+Binned residual plot checks if all residuals are within error bound for different bins. Blue points indicate residuals that are okay and red points indicate that the model is either overfitting or underfitting for that specific range of probabilities (In this example model residuals are out of the error bound for proabilities under 20%).
+
+From the collinearity plot we can check if there's multicollinearity present between independent variables of the model
+
+Posterior predictive check is not in fitting a logistic regression
+
+-   DHARMa diagnostic plots
+
+DHARMa uses a simulation to build up an empirical distribution of the residuals.
+
+The QQ plot in this package tests for uniformity with Kolmogorov-Smirnov test, test for over/under dispersion using dispersion test and test for outliers using the outlier test. The plot also visually checks the distribution of the residuals.
+
+In the residual vs predicted plot, the dotted lines show the expected quantiles and the black line depicts the simulated quantiles which ideally should be straight lines
+
+### Question 1 - e
+
+-   Model coefficient interpretation:
+
+Increase in age of the child by 1 month would increase the log odds of having Kyphosis by 0.01.
+
+Increase of the starting number of vertebrae by 1 unit would decrease the log odds of having Kyphosis by -0.206.
+
+Increase in the total number of vertebrea involved in the surgery would increase the log odds ratio of having kyphosis by 0.41.
+
+Model Deviance:
+
+The null deviance shows how well a model with only intercept predicts the response variable, lower the better
+
+The residual deviance shows how well is the currently fitted model predicts the response variable. The residual deviance is lower than the null deviance, so this model is an improvement compared to the model with only the intercept.
+
+-   Coefficient plot
+
+```{r}
+dwplot(model_1, ci=0.90)
+```
+
+The coefficient plot was generated using 90% CI and it can be seen that all the covariate estimates are significant at 10% significance level. Estimates are considered significant since estimates do not contain zero inside their confidence intervals.
+
+## Question 2
+
+-   Loading the data
+
+```{r}
+g_url <- "https://raw.githubusercontent.com/bbolker/mm_workshops/master/data/gopherdat2.csv"
+
+g_data <- read.csv(g_url)
+```
+
+### Question 2 a
+
+```{r}
+plt4 <- ggplot(
+  g_data,
+  aes(
+    x=factor(year),
+    y=shells/Area,
+    group=Site,
+    color=Site,
+    label=Site
+    )
+  ) +
+  geom_line() +
+  geom_point(
+    mapping = aes(size=prev),
+    show.legend = FALSE
+    ) +
+  labs(
+    title = "Shell counts of different site across years",
+    x = 'Year'
+    )
+
+
+ggplotly(plt4)
+```
+
+The plot indicates the trends of the shell count per unit area across the 10 sites in years 2004, 2005 and 2006. The dot size indicates the seroprevalence of each site across the three years.
+
+### Question 2 b
+
+It is a count data hence fit a poison regression model and estimate the dispersion parameter.
+
+```{r}
+pois_model_1 <- glm(
+  shells~factor(year)+prev,
+  offset=log(Area), family=poisson(link='log'), data=g_data
+  )
+
+summary(pois_model_1)
+```
+
+-   Estimate the dispersion parameter
+
+```{r}
+sum(residuals(pois_model_1, type = "pearson")^2)/pois_model_1$df.residual
+```
+
+-   Data is not overdisperse hence the poisson regression is appropriate.
+
+### Question 2 c
+
+```{r}
+# Adding dummy columns to represent the factor column year
+g_data <- dummy_columns(g_data, select_columns = "year") |>
+  subset(select = -c(year_2004))
+
+# Fitting the poisson model using Area as an offset using the mle2 function 
+pois_model_2 <- mle2(
+  shells ~ dpois(lambda = exp(b1 + b2*year_2005 + b3*year_2006 + b4*prev)*Area),
+  start = list(b1=0,b2=0,b3=0,b4=0),
+  data = g_data
+  )
+
+pois_model_2
+```
+
+The model generates estimates that are quite similar to the estimates of the first model
+
+### Question 2 d
+
+-   Creating a function to calculate negative loglikelihood
+
+```{r}
+LL <- function(b1, b2, b3, b4, data=g_data){
+  
+  lambda_est <- exp(
+    b1 + b2*data$year_2005 + b3*data$year_2006 + b4*data$prev)*data$Area
+  
+  neg_ll <- -sum(dpois(data$shells, lambda_est, log = TRUE))
+  
+  return(neg_ll)
+}
+```
+
+Fitting the model using the custom liklehood function
+
+```{r}
+pois_model_3 <- mle2(
+  minuslogl = LL, start = list(b1=0,b2=0,b3=0,b4=0)
+  )
+pois_model_3
+```
+
+The estimates are identical to the 2nd model.
+
+### Question 2 e
+
+-   Comparing the coefficients of the three models
+
+```{r}
+print('Model 1:')
+coef(pois_model_1)
+print('Model 2')
+coef(pois_model_2)
+print('Model 3:')
+coef(pois_model_3)
+```
+
+The coefficients from the second model are identical to the coefficients that of the third model.
+
+The coefficients from the first model are equal to the coefficients of the other two models up to the third decimal place (nearly identical).
+
+-   Check for Wald CI and profile CI
+
+```{r}
+# Wald CI
+print("Wald CI for model 1")
+confint(pois_model_1, method="Wald")
+
+# Profile CI
+print("Profile Likelihood CI for model 1")
+confint(pois_model_1)
+```
+
+The Wald CI and Profile CI and identical for the parameters in the original poisson regression model.
+
+## Question 3
+
+```{r}
+# Load the data
+data("endometrial")
+```
+
+-   Fit the models
+
+```{r}
+# Fit model using glm()
+model_1 <- glm(
+  HG ~ NV + PI + EH, data = endometrial, family = binomial(link="logit")
+  )
+
+summary(model_1)
+
+# Fit the model using bayesglm()
+model_2 <- bayesglm(
+  HG ~ NV + PI + EH, data = endometrial, family = binomial(link="logit")
+)
+
+summary(model_2)
+
+# Update the glm() model with the method parameter
+model_3 <- update(model_1, method = "brglmFit")
+
+summary(model_3)
+```
+
+-   Comparing coefficients, confidence intervals, p-values and likelihood ratio test for each parametes in the glm model
+
+```{r}
+coefficients_df <- tibble(
+  parameter = c("(Intercept)","NV","PI","EH"),
+  glm = coef(model_1),
+  bayesglm = coef(model_2),
+  brglmFit = coef(model_3)
+)
+
+
+p_values_df <- tibble(
+  parameter = c("(Intercept)","NV","PI","EH"),
+  glm = c(tidy(model_1)$p.value),
+  bayesglm = c(tidy(model_2)$p.value),
+  brglmFit = c(tidy(model_3)$p.value)
+)
+
+# From the bayesglm method what we can calculate is the credible intervals for the parameter estimates.
+simulates <- coef(sim(model_2))
+posterior_int <-simulates[,1]
+posterior_NV <- simulates[,2]
+posterior_PI <- simulates[,3]
+posterior_EH <- simulates[,4]
+
+# To fix the simulations from the posterior distribution
+set.seed(23)
+
+CI_df <- tibble(
+  parameter = c("(Intercept)","NV","PI","EH"),
+  glm_LL = c(confint(model_1)[,1]),
+  glm_UL = c(confint(model_1)[,2]),
+  bayesglm_LL = c(quantile(posterior_int, 0.025),quantile(posterior_NV, 0.025), quantile(posterior_PI, 0.025), quantile(posterior_EH, 0.025)),
+  bayesglm_UL = c(quantile(posterior_int, 0.975),quantile(posterior_NV, 0.975), quantile(posterior_PI, 0.975), quantile(posterior_EH, 0.975)),
+  brglmFit_LL = c(confint(model_3)[,1]),
+  brglmFit_UL = c(confint(model_3)[,2])
+)
+
+
+```
+Comparing coefficients
+
+```{r}
+coefficients_df
+```
+
+Comparing confidence intervals, for the bayesglm() model credible intervals were calculated.
+
+```{r}
+CI_df
+```
+
+Comparing p-values
+
+```{r}
+p_values_df
+```
+
+If we compare the three methods, the estimate for NV in the original glm() model looks quite odd. The reason for this could be a convergence issue.
+
+The confidence intervals for PI and EH looks consistent across the models but the confidence interval for NV is quit large in the default glm() method.
+
+The p-values implies EH is significant at 5% significance in all three models and PI is not significant in all three models. The only deviation is for NV, NV is not significant at 5% or 10% level in the original glm() model. NV is significant at 5% significance level in the bayesglm() model, and it is significant at 10% significanve level in the glm(method=brglmFit) model.
+
+-   Conducting likelihood ratio test for each parameter separately for the three models
+
+```{r}
+# Fitting the models with each parameter separately for glm
+glm_null_model <- glm(
+  HG ~ 1, data = endometrial, family = binomial(link="logit")
+  )
+glm_NV_model <- glm(
+  HG ~ NV, data = endometrial, family = binomial(link="logit")
+)
+glm_PI_model <- glm(
+  HG ~ PI, data = endometrial, family = binomial(link="logit")
+)
+glm_EH_model <- glm(
+  HG ~ EH, data = endometrial, family = binomial(link="logit")
+)
+
+# Fitting the models with each parameter separately for bayesglm
+bayesglm_null_model <- bayesglm(
+  HG ~ 1, data = endometrial, family = binomial(link="logit")
+  )
+bayesglm_NV_model <- bayesglm(
+  HG ~ NV, data = endometrial, family = binomial(link="logit")
+)
+bayesglm_PI_model <- bayesglm(
+  HG ~ PI, data = endometrial, family = binomial(link="logit")
+)
+bayesglm_EH_model <- bayesglm(
+  HG ~ EH, data = endometrial, family = binomial(link="logit")
+)
+
+# Fitting the models with each parameter separately for brglmfit
+brglm_null_model <- glm(
+  HG ~ 1, data = endometrial, family = binomial(link="logit"),
+  method = "brglmFit"
+  )
+brglm_NV_model <- glm(
+  HG ~ NV, data = endometrial, family = binomial(link="logit"),
+  method = "brglmFit"
+)
+brglm_PI_model <- glm(
+  HG ~ PI, data = endometrial, family = binomial(link="logit"),
+  method = "brglmFit"
+)
+brglm_EH_model <- glm(
+  HG ~ EH, data = endometrial, family = binomial(link="logit"),
+  method = "brglmFit"
+)
+
+# Conducting likelikhood ratio test for each parameter in glm
+lrt_NV_glm <- lrtest(glm_null_model,glm_NV_model)
+lrt_PI_glm <- lrtest(glm_null_model,glm_PI_model)
+lrt_EH_glm <- lrtest(glm_null_model,glm_EH_model)
+
+# Conducting likelikhood ratio test for each parameter in bayesglm
+lrt_NV_bayesglm <- lrtest(bayesglm_null_model,bayesglm_NV_model)
+lrt_PI_bayesglm <- lrtest(bayesglm_null_model,bayesglm_PI_model)
+lrt_EH_bayesglm <- lrtest(bayesglm_null_model,bayesglm_EH_model)
+
+# Conducting likelikhood ratio test for each parameter in brglm
+lrt_NV_brglm <- lrtest(brglm_null_model,brglm_NV_model)
+lrt_PI_brglm <- lrtest(brglm_null_model,brglm_PI_model)
+lrt_EH_brglm <- lrtest(brglm_null_model,brglm_EH_model)
+
+lltest_df <- tibble(
+  parametets = c("NV", "PI", "EG"),
+  loglik_glm = c(lrt_NV_glm[2,]$LogLik, lrt_PI_glm[2,]$LogLik, lrt_EH_glm[2,]$LogLik),
+  pvalues_glm = c(lrt_NV_glm[2,]$`Pr(>Chisq)`, lrt_PI_glm[2,]$`Pr(>Chisq)`, lrt_EH_glm[2,]$`Pr(>Chisq)`),
+  loglik_bayesglm = c(lrt_NV_bayesglm[2,]$LogLik, lrt_PI_bayesglm[2,]$LogLik, lrt_EH_bayesglm[2,]$LogLik),
+  pvalues_bayesglm = c(lrt_NV_bayesglm[2,]$`Pr(>Chisq)`, lrt_PI_bayesglm[2,]$`Pr(>Chisq)`, lrt_EH_bayesglm[2,]$`Pr(>Chisq)`),
+  loglik_brglm = c(lrt_NV_brglm[2,]$LogLik, lrt_PI_brglm[2,]$LogLik, lrt_EH_brglm[2,]$LogLik),
+  pvalues_brglm = c(lrt_NV_brglm[2,]$`Pr(>Chisq)`, lrt_PI_brglm[2,]$`Pr(>Chisq)`, lrt_EH_brglm[2,]$`Pr(>Chisq)`)
+)
+
+# Summary table
+lltest_df
+```
+
+The likelikhood ratio test for all three models confirms that the NV parameter is not significant. The 'PI' and 'EG' variable models are significant for all glm, bayesglm and brglm
+
+- Comparing the theory behind the methods
+
+The variation for NV across the three models could be a convergence issue. This occurs when there is a complete separation or quasi separation in the data. We could check for complete separation by using the below command
+
+```{r}
+glm(
+  HG ~ NV + PI + EH, data = endometrial, family = binomial(link="logit"),
+  method = "detect_separation"
+  )
+```
+
+It is evident that the likelihood estimate does not converge for 'NV'.
+
+-   The reasons for why different methods give different results:
+
+-   The default glm method etimates the parameters using the maximum likelihood estimation method. In this case since there is a complete separation, etimated value will be very large (it does not coverge).
+
+-   The bayesglm method uses the bayesian approach. That is it uses prior information and likelihood function to create a posterior distribution. The population parameters are estimated using the simulates generated from the posterior distribution.
+
+-   The glm method with brglmFit parameter uses bias reduction methods and penalized maximum likelikhood methods.
