@@ -1,4 +1,5 @@
 ---
+author: "Rajitha Senanayake Senanayake Achchillage (400545853)"
 title: "Assignment 2"
 format: html
 ---
