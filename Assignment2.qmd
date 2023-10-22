@@ -98,7 +98,7 @@ plot(plt3)
 
 -   From the first plot and the scatter plot, it is visible that if a child has high number of vertebrae operated at the start of the surgery then there is high chance for that child to not have Kyphosis
 
--   Considering all the plots, the age, starting number of vertebrae and the total vertebrae involved in the surgery overlap regardless of presenece and absence of Kyphosis.
+-   Considering all the plots, the age, starting number of vertebrae and the total vertebrae involved in the surgery overlap regardless of presence and absence of Kyphosis.
 
 ### Question 1 c - Fitting the model
 
@@ -362,6 +362,8 @@ summary(model_2)
 # Update the glm() model with the method parameter
 model_3 <- update(model_1, method = "brglmFit")
 
+## BMB: good use of update()
+
 summary(model_3)
 ```
 
@@ -538,5 +540,7 @@ It is evident that the likelihood estimate does not converge for 'NV'.
 -   The bayesglm method uses the bayesian approach. That is it uses prior information and likelihood function to create a posterior distribution. The population parameters are estimated using the simulates generated from the posterior distribution. **BMB**: bayesglm doesn't do any simulations/sample from the posterior distribution, it uses maximum *a posteriori* (MAP) estimation to find the coefficients corresponding to the maximum posterior probability.
 
 -   The glm method with brglmFit parameter uses bias reduction methods and penalized maximum likelikhood methods.
+
+**BMB**: you should *definitely* have told me that you worked on the homework with Ramkrishna Samanta.  While I don't think either of you plagiarized the other -- there were plenty of minor differences in your approaches that I don't think were done just to make the two assignments look different -- there are so many similarities in the parts that you got wrong that it's obvious that you were working together. This is fine, but you **must** state at the beginning of your assignment that you worked with each other; otherwise I might think that you had collaborated inappropriately.
 
 mark: 8/10
