@@ -15,7 +15,7 @@ library(tidyverse)
 library(dotwhisker)
 library(plotly)
 library(bbmle)
-library(fastDummies)
+library(fastDummies) ## BMB: what for?
 library(brglm2)
 library(detectseparation)
 library(arm)
@@ -88,6 +88,7 @@ plt2 <- ggplot(kyphosis, aes(x=factor(Kyphosis), y=Number)) +
     )
 
 plt3 <- ggplot(kyphosis, aes(x=Number, y=Start)) +
+    ## BMB: stat_sum() is better for this
   geom_point(aes(col=factor(Kyphosis)))
 
 plot(plt1)
@@ -139,7 +140,7 @@ plot(simulated_residuals)
 
 The scale-location plot with standardized pearson residuals can be used to check the fit of the model, ideally the red line should roughly be horizontal, taking it to account this model is not a very good fit.
 
-Normal QQ plot is used to check if the deviance residuals follow a normal distribution, in logistic regression it will not follow a normal distribution unless we have a very large sample of data
+Normal QQ plot is used to check if the deviance residuals follow a normal distribution, in logistic regression it will not follow a normal distribution unless we have a very large sample of data **BMB**: it's not necessarily about a large sample; for example, a two-group comparison of Bernoulli data (or any comparison with a small number of unique covariate sets) will be bad no matter how many points there are ...
 
 Residuals vs Deviance plot is used to check if there are any outliers in the data
 
@@ -150,6 +151,8 @@ The QQ plot and the influential observation points are similar to the of the plo
 Binned residual plot checks if all residuals are within error bound for different bins. Blue points indicate residuals that are okay and red points indicate that the model is either overfitting or underfitting for that specific range of probabilities (In this example model residuals are out of the error bound for proabilities under 20%).
 
 From the collinearity plot we can check if there's multicollinearity present between independent variables of the model
+
+**BMB**: there's always multicollinearity. (And, why do we care?)
 
 Posterior predictive check is not in fitting a logistic regression
 
@@ -169,13 +172,13 @@ Increase in age of the child by 1 month would increase the log odds of having Ky
 
 Increase of the starting number of vertebrae by 1 unit would decrease the log odds of having Kyphosis by -0.206.
 
-Increase in the total number of vertebrea involved in the surgery would increase the log odds ratio of having kyphosis by 0.41.
+Increase in the total number of vertebrae involved in the surgery would increase the log odds ratio of having kyphosis by 0.41.
 
 Model Deviance:
 
 The null deviance shows how well a model with only intercept predicts the response variable, lower the better
 
-The residual deviance shows how well is the currently fitted model predicts the response variable. The residual deviance is lower than the null deviance, so this model is an improvement compared to the model with only the intercept.
+The residual deviance shows how well is the currently fitted model predicts the response variable. The residual deviance is lower than the null deviance, so this model is an improvement compared to the model with only the intercept. **BMB**: this is **always** true, unless something has gone badly wrong with the computation ...
 
 -   Coefficient plot
 
@@ -184,6 +187,8 @@ dwplot(model_1, ci=0.90)
 ```
 
 The coefficient plot was generated using 90% CI and it can be seen that all the covariate estimates are significant at 10% significance level. Estimates are considered significant since estimates do not contain zero inside their confidence intervals.
+
+**BMB**: I really want you to say more than "it's significant" or "it's not significant".  coeff plot tells you (*if* coeffs have the same units, or if they've been standardized) the relative magnitudes of effects, not just significant/NS ...
 
 ## Question 2
 
@@ -224,6 +229,8 @@ ggplotly(plt4)
 
 The plot indicates the trends of the shell count per unit area across the 10 sites in years 2004, 2005 and 2006. The dot size indicates the seroprevalence of each site across the three years.
 
+**BMB**: OK, although it would be more effective to put seroprevalence on the x-axis and use dot shape (or something) for years.
+
 ### Question 2 b
 
 It is a count data hence fit a poison regression model and estimate the dispersion parameter.
@@ -243,14 +250,18 @@ summary(pois_model_1)
 sum(residuals(pois_model_1, type = "pearson")^2)/pois_model_1$df.residual
 ```
 
--   Data is not overdisperse hence the poisson regression is appropriate.
+-   Data is not overdispersed hence the poisson regression is appropriate.
 
 ### Question 2 c
 
 ```{r}
 # Adding dummy columns to represent the factor column year
 g_data <- dummy_columns(g_data, select_columns = "year") |>
-  subset(select = -c(year_2004))
+    subset(select = -c(year_2004))
+
+## BMB: you don't need to construct dummies by hand, and you usually
+## shouldn't -- use R's built-in machinery (i.e. as long as year
+## is a factor, model.matrix() will construct the dummies/contrasts for you)
 
 # Fitting the poisson model using Area as an offset using the mle2 function 
 pois_model_2 <- mle2(
@@ -262,7 +273,7 @@ pois_model_2 <- mle2(
 pois_model_2
 ```
 
-The model generates estimates that are quite similar to the estimates of the first model
+The model generates estimates that are quite similar to the estimates of the first model. **BMB**: you could have done this with `parameters=`, but this way is fine too
 
 ### Question 2 d
 
@@ -314,13 +325,15 @@ The coefficients from the first model are equal to the coefficients of the other
 # Wald CI
 print("Wald CI for model 1")
 confint(pois_model_1, method="Wald")
+## BMB: this doesn't actually work. Try instead:
+confint.default(pois_model_1)
 
 # Profile CI
 print("Profile Likelihood CI for model 1")
 confint(pois_model_1)
 ```
 
-The Wald CI and Profile CI and identical for the parameters in the original poisson regression model.
+The Wald CI and Profile CI and identical for the parameters in the original poisson regression model. **BMB**: that's because R silently did the wrong thing ...
 
 ## Question 3
 
@@ -433,7 +446,9 @@ glm_EH_model <- glm(
   HG ~ EH, data = endometrial, family = binomial(link="logit")
 )
 
-# Fitting the models with each parameter separately for bayesglm
+## Fitting the models with each parameter separately for bayesglm
+## BMB: why ... ???
+
 bayesglm_null_model <- bayesglm(
   HG ~ 1, data = endometrial, family = binomial(link="logit")
   )
@@ -480,8 +495,12 @@ lrt_NV_brglm <- lrtest(brglm_null_model,brglm_NV_model)
 lrt_PI_brglm <- lrtest(brglm_null_model,brglm_PI_model)
 lrt_EH_brglm <- lrtest(brglm_null_model,brglm_EH_model)
 
+## BMB: this isn't how it works.  Rather than doing individual univariate
+##  tests, you should test the effect of **dropping* individual parameters/
+##  covariates from the full model ...
+
 lltest_df <- tibble(
-  parametets = c("NV", "PI", "EG"),
+  parameters = c("NV", "PI", "EG"),
   loglik_glm = c(lrt_NV_glm[2,]$LogLik, lrt_PI_glm[2,]$LogLik, lrt_EH_glm[2,]$LogLik),
   pvalues_glm = c(lrt_NV_glm[2,]$`Pr(>Chisq)`, lrt_PI_glm[2,]$`Pr(>Chisq)`, lrt_EH_glm[2,]$`Pr(>Chisq)`),
   loglik_bayesglm = c(lrt_NV_bayesglm[2,]$LogLik, lrt_PI_bayesglm[2,]$LogLik, lrt_EH_bayesglm[2,]$LogLik),
@@ -500,6 +519,8 @@ The likelikhood ratio test for all three models confirms that the NV parameter i
 
 The variation for NV across the three models could be a convergence issue. This occurs when there is a complete separation or quasi separation in the data. We could check for complete separation by using the below command
 
+**BMB**: complete separation and failure to converge are different. It's true that the model doesn't actually converge to an infinite coeff value, but the problem is not lack of convergence, but rather the failure of the Wald approximation.
+
 ```{r}
 glm(
   HG ~ NV + PI + EH, data = endometrial, family = binomial(link="logit"),
@@ -507,12 +528,15 @@ glm(
   )
 ```
 
-It is evident that the likelihood estimate does not converge for 'NV'.
+It is evident that the likelihood estimate does not converge for 'NV'. 
+**BMB**: see above.
 
 -   The reasons for why different methods give different results:
 
--   The default glm method etimates the parameters using the maximum likelihood estimation method. In this case since there is a complete separation, etimated value will be very large (it does not coverge).
+-   The default glm method etimates the parameters using the maximum likelihood estimation method. In this case since there is a complete separation, estimated value will be very large (it does not coverge).
 
--   The bayesglm method uses the bayesian approach. That is it uses prior information and likelihood function to create a posterior distribution. The population parameters are estimated using the simulates generated from the posterior distribution.
+-   The bayesglm method uses the bayesian approach. That is it uses prior information and likelihood function to create a posterior distribution. The population parameters are estimated using the simulates generated from the posterior distribution. **BMB**: bayesglm doesn't do any simulations/sample from the posterior distribution, it uses maximum *a posteriori* (MAP) estimation to find the coefficients corresponding to the maximum posterior probability.
 
 -   The glm method with brglmFit parameter uses bias reduction methods and penalized maximum likelikhood methods.
+
+mark: 8/10
