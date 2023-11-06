@@ -1,0 +1,239 @@
+---
+title: "STATS 720"
+author: "Rajitha Senanayake"
+format: html
+editor: visual
+---
+
+# I collaborated with Ramkrishna Samanta and John Tweedie on this assignment.
+
+## Load packages
+
+```{r}
+library(mlmRev)
+library(nlme)
+library(lme4)
+library(lmerTest)
+library(dplyr)
+library(dotwhisker)
+library(broom.mixed)
+library(lattice)
+library(lmtest)
+```
+
+## Load the dataset
+
+```{r}
+data("Early")
+```
+
+## Question a
+
+```{r}
+# Standardize the age variable
+Early <- Early |> mutate_at("age",~(scale(.)|> as.vector()))
+```
+
+```{r}
+# Using lmer function
+model_1 <- lmer(cog~age+trt+(1+age|id), data = Early, REML=TRUE)
+
+# Using lme function
+model_2 <- lme(
+  cog~age+trt, data = Early, random = ~1+age|id,
+  control = lmeControl(opt = "optim"), method = "REML"
+)
+```
+
+-   Calculating the log likelihoods of the two models
+
+```{r}
+# lmer
+logLik(model_1)
+
+# lme
+logLik(model_2)
+```
+
+-   Using the all.equal function with tolerance level of 0.01
+
+```{r}
+all.equal(logLik(model_1), logLik(model_2), tolerance = 0.01)
+```
+
+-   The log likelihood for the lmer function is slightly higher (+0.022) than that of the lme function.
+
+-   Therefore lme4 package has a slightly better fit.
+
+-   all.equal function returns true upto the tolerance of 0.01, so the log likelihood values are very similar.
+
+## Question b
+
+-   Creating coefficient plot for fixed effects of the two models
+
+```{r}
+library(merDeriv)
+dwplot(list(model_1,model_2),effects="fixed")
+```
+
+-   Age has a negative impact on cognitive scores but having an enriched environment (treatment) would impact positively on the infants.
+
+```{r}
+coef(summary(model_1))
+```
+
+```{r}
+coef(summary(model_2))
+```
+
+-   Estimates for the 'age' covariate is identical for two functions lmer and lme.
+
+-   The estimates for 'yth level of treatment' is slightly different. lmer estimate for this level of the treatment is 0.028641 higher than the estimate from lme package.
+
+-   **Find the reason why!!!**
+
+-   The Wald CIs for the two models
+
+```{r}
+# For lmer function
+tidy(model_1, effects="fixed", conf.int=TRUE)[,c(2:4,8:9)]
+
+# For lme function
+tidy(model_2, effects="fixed", conf.int=TRUE)[,c(2:4,8:9)]
+```
+
+-   There are slight changes in the standard errors, hence the two functions produce different Wald confidence intervals
+
+-   Comparing the denominator degrees of freedom
+
+```{r}
+# For lmer function
+tidy(model_1, effects="fixed")[,c(2:3,6)]
+
+# For lme function
+tidy(model_2, effects="fixed")[,c(2:3,5)]
+
+```
+
+-   The denominator degrees of freedom is different for the two functions.
+
+-   For the 'age' variable, lme calculates ddf as 205 and lmer approximates ddf as 105.6147 (+ 99.3853 higher in lme).
+
+-   For the level y of treatment variable, lme calculates ddf as 101 and lmer approximates the ddf as 101.0308 (0.0308 higher in lmer).
+
+-   The lme function utilizes degrees of freedom based on the level of grouping where the particular term is being calculated (Pinheiro and Bates, 2006).
+
+-   The lmer function uses Satterthwaite's method by default to approximate denominator degrees of freedom.
+
+## Question c
+
+```{r}
+# Satterthwaite's method
+sm <- summary(model_1,  ddf = "Satterthwaite")
+sm
+
+# Kenward Roger's method
+krm <- summary(model_1,  ddf = "Kenward-Roger")
+krm
+```
+
+-   comparing the denominator degrees of freedom using all.equal function
+
+```{r}
+all.equal(sm$coefficients[,3], krm$coefficients[,3], tolerance = 0.1)
+```
+
+-   This returns true upto a tolerance level of 0.1, hence the ddf are slightly different
+
+-   The p values computed from the two methods are identical except for that of 'trtY'.
+
+-   Comparing the p values of y level of treatment from the two methods.
+
+```{r}
+all.equal(2.42e-06,2.96e-06, tolerance = 0.00001)
+```
+
+-   The p values for 'trtY' of the two methods are practically identical.
+
+-   Based on these comparisons, the two methods won't have a significant impact for this example.
+
+## Question d
+
+```{r}
+dotplot(
+  ranef(model_1,condVar=TRUE),
+  lattice.options=list(layout=c(1,2))
+)
+```
+
+-   As age increases the random effect of the intercept decreases
+
+## Question e
+
+-   Fixed effects are constant across individuals, and random effects varying (Kreft and De Leeuw, 1998)
+
+-   It is also recommended for a random effect variable to have a minimum of 6 levels. (https://bbolker.github.io/mixedmodels-misc/glmmFAQ.html)
+
+-   In this dataset, the individuals are divided as the treatment group (trt Y) and the control group (trt N), the treatment variable has only two levels.
+
+-   The treatment effect will be constant for all individuals within each group (control and the treatment).
+
+-   Due to the above reasons it does not make sense to consider the treatment as a random effect variables.
+
+## Question f
+
+```{r}
+summary(lmer(cog~trt+(1+age|id), data = Early, REML=TRUE))
+```
+
+-   If we only consider the random effect of age, it will only account for how age would impact the cognitive score within each individual infant.
+
+-   Based on dataset description, the purpose of this study is to compare how an enriched environment would impact the cognitive scores of the treatment group compared to the control group, therefore it is important to have age as a fixed variable to identify the overall impact of age on cognitive scores of the treatment group and the control group rather than looking at each individual infant.
+
+## Question g
+
+```{r}
+# Independent intercept and age variation across subjects
+model_a <- lmer(cog~age+trt+(1|id)+(0+age|id), data = Early, REML=TRUE)
+
+
+# Intercept variation only
+model_b <- lmer(cog~age+trt+(1|id), data = Early, REML=TRUE)
+```
+
+-   Testing the independent intercept and age variation model with the correlated model
+
+```{r}
+lrtest(model_a,model_1)
+```
+
+-   Based on log likelihood test results, we can say that the correlated model has a better fit since p value is significant
+
+-   Testing the independent intercept and age variation model with intercept only model
+
+```{r}
+lrtest(model_b, model_a)
+```
+
+-   The null hypothesis in the above test is that variance of age is zero.
+-   The parameter estimation space of the variances of age and intercept will be the first quadrant, but since the null hypothesis assumes the variance of age is zero, it will create a unreliable neighborhood on the axis, hence we can't use standard likelihood test in this scenario.
+
+-   Testing the nested models using parametric bootstrap
+
+```{r}
+# Correlated slope/intercept model comparison with independent slope/intercept model
+pb_1 <- pbkrtest::PBmodcomp(model_a, model_1, seed=42)
+pb_1
+
+# Independent slop/intercept model comparison with intercept only model
+pb_2 <- pbkrtest::PBmodcomp(model_b, model_a, seed=42)
+pb_2
+```
+
+```{r}
+pb_1
+```
+
+```{r}
+pb_2
+```
