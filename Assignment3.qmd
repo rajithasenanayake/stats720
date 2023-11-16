@@ -7,6 +7,8 @@ editor: visual
 
 # I collaborated with Ramkrishna Samanta and John Tweedie on this assignment.
 
+**BMB:**: ok
+
 ## Load packages
 
 ```{r}
@@ -32,6 +34,8 @@ data("Early")
 ```{r}
 # Standardize the age variable
 Early <- Early |> mutate_at("age",~(scale(.)|> as.vector()))
+## OR: mutate(across(age, ~drop(scale(.))))
+## (or          ....      ~ scale(.) |> drop() ....
 ```
 
 ```{r}
@@ -65,18 +69,20 @@ all.equal(logLik(model_1), logLik(model_2), tolerance = 0.01)
 
 -   Therefore lme4 package has a slightly better fit.
 
--   all.equal function returns true upto the tolerance of 0.01, so the log likelihood values are very similar.
+-   all.equal function returns true up to the tolerance of 0.01, so the log likelihood values are very similar.
+
+**BMB**: you can use `all.equal(..., tolerance = 0` to get a report on the difference (rather than reducing the tolerance until `all.equal()` "fails")
 
 ## Question b
 
 -   Creating coefficient plot for fixed effects of the two models
 
 ```{r}
-library(merDeriv)
+library(merDeriv) ## BMB: why???
 dwplot(list(model_1,model_2),effects="fixed")
 ```
 
--   Age has a negative impact on cognitive scores but having an enriched environment (treatment) would impact positively on the infants.
+-   Age has a negative impact on cognitive scores but having an enriched environment (treatment) would impact positively on the infants. (**BMB**: I prefer "improve" or "decrease" cognitive score rather than "have a negative impact" or "impact positively" (vague ...))
 
 ```{r}
 coef(summary(model_1))
@@ -90,7 +96,7 @@ coef(summary(model_2))
 
 -   The estimates for 'yth level of treatment' is slightly different. lmer estimate for this level of the treatment is 0.028641 higher than the estimate from lme package.
 
--   **Find the reason why!!!**
+-   **Find the reason why!!!** **BMB**: I think this is just caused by the fact that the `lme()` fit didn't really converge all the way to the optimum (if it had gotten to the same correlation of -1 I think the `trtY` coefficients would match. Since the difference is only about 1% of the SE I'm not too worried ....
 
 -   The Wald CIs for the two models
 
@@ -123,7 +129,7 @@ tidy(model_2, effects="fixed")[,c(2:3,5)]
 
 -   The lme function utilizes degrees of freedom based on the level of grouping where the particular term is being calculated (Pinheiro and Bates, 2006).
 
--   The lmer function uses Satterthwaite's method by default to approximate denominator degrees of freedom.
+-   The lmer function uses Satterthwaite's method by default to approximate denominator degrees of freedom. **BMB**: yes, if `lmerTest` is used
 
 ## Question c
 
@@ -143,9 +149,9 @@ krm
 all.equal(sm$coefficients[,3], krm$coefficients[,3], tolerance = 0.1)
 ```
 
--   This returns true upto a tolerance level of 0.1, hence the ddf are slightly different
+-   This returns true up to a tolerance level of 0.1, hence the ddf are slightly different **BMB**: in this case you should use your knowledge of the $t$ distribution reather than just comparing relative magnitudes of differences ...
 
--   The p values computed from the two methods are identical except for that of 'trtY'.
+-   The p values computed from the two methods are identical except for that of 'trtY'. (**BMB**: not really "identical")
 
 -   Comparing the p values of y level of treatment from the two methods.
 
@@ -153,7 +159,7 @@ all.equal(sm$coefficients[,3], krm$coefficients[,3], tolerance = 0.1)
 all.equal(2.42e-06,2.96e-06, tolerance = 0.00001)
 ```
 
--   The p values for 'trtY' of the two methods are practically identical.
+-   The p values for 'trtY' of the two methods are practically identical. (OK)
 
 -   Based on these comparisons, the two methods won't have a significant impact for this example.
 
@@ -168,6 +174,7 @@ dotplot(
 
 -   As age increases the random effect of the intercept decreases
 
+
 ## Question e
 
 -   Fixed effects are constant across individuals, and random effects varying (Kreft and De Leeuw, 1998)
@@ -179,6 +186,8 @@ dotplot(
 -   The treatment effect will be constant for all individuals within each group (control and the treatment).
 
 -   Due to the above reasons it does not make sense to consider the treatment as a random effect variables.
+
+**BMB**: good research, but this is a bit of a shotgun approach. 
 
 ## Question f
 
@@ -215,6 +224,8 @@ lrtest(model_a,model_1)
 lrtest(model_b, model_a)
 ```
 
+**BMB**: can also use `anova()`
+
 -   The null hypothesis in the above test is that variance of age is zero.
 -   The parameter estimation space of the variances of age and intercept will be the first quadrant, but since the null hypothesis assumes the variance of age is zero, it will create a unreliable neighborhood on the axis, hence we can't use standard likelihood test in this scenario.
 
@@ -237,3 +248,7 @@ pb_1
 ```{r}
 pb_2
 ```
+
+**BMB**: conclusions??
+
+mark: 9
