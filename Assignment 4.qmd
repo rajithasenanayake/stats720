@@ -1,0 +1,611 @@
+---
+title: "Assignment 4"
+author: "Rajitha Senanayake"
+format: pdf
+editor: visual
+---
+
+-   Load packages
+
+```{r}
+library(ggplot2)
+library(lme4)
+library(ggeffects)
+library(DHARMa)
+library(dotwhisker)
+library(mlmRev)
+library(tidyverse)
+library(performance)
+library(grDevices)
+library(glmmTMB)
+library(MASS)
+library(nlme)
+library(broom.mixed)
+```
+
+### Question 1
+
+-   Load the dataset and read about the dataset
+
+```{r}
+data(nepali, package = 'faraway')
+?faraway::nepali
+```
+
+-   Removing rows with NA values
+
+```{r}
+nepali <- na.omit(nepali)
+```
+
+-   Convert sex variable to male and female based on the description
+
+```{r}
+nepali$sex[nepali$sex == 1] <- "male"
+nepali$sex[nepali$sex == 2] <- "female"
+
+# Converting to a factor
+nepali$sex <- as.factor(nepali$sex)
+```
+
+-   Plotting the relationship of weight with age for each child
+
+```{r}
+# Converting id and lit variables to a factor
+nepali$id <- as.factor(nepali$id)
+nepali$lit <- as.factor(nepali$lit)
+
+# Plotting the data
+ggplot(nepali, aes(x=age, y=wt, group = id)) +
+  geom_line(aes(color = sex))+
+  geom_point(aes(color = sex)) +
+  facet_wrap(~sex)
+```
+
+-   Fitting a model
+
+The effect of age on weight can be different for each child, hence I fitted a mixed model with random intercept and slope for age that varies among individuals.
+
+```{r}
+# Fit a mixed model
+model_1 <- lmer(
+  wt ~ mage + died + alive + lit + age + sex + (1+age|id),
+  data = nepali,
+  REML = TRUE
+)
+```
+
+-   Residual plots using check_model
+
+```{r, fig.width=8, fig.height=12}
+check_model(model_1)
+```
+
+Fitted value vs Residuals plot shows some non-linear pattern for small fitted values and there appears to be some heterogeneity in residual variance. The QQ plot shows the residuals to be a light tailed distribution. But overall the models seems to be an "okay" fit in my view.
+
+-   Model results
+
+```{r}
+summary(model_1)
+```
+
+On an average the effect of mother's age on weight gain is 0.046 when other variables are kept constant. In a similar we can interpret the coefficients of the remaining fixed effects as well. Due to the random effect we incorporated, the variability in the intercept is 1.95 and the variability in the effect of age is 0.0013
+
+-   Confidence intervals of model prediction overlayed over the raw data
+
+```{r}
+# Generate the confidence intervals for predictions based on age and sex
+predictions_1 <- ggpredict(model_1, terms = c("age","sex"))
+print(predictions_1, n = Inf)
+
+
+# Plot the predictions with CIs
+plot(predictions_1)
+```
+Overlaying the prediction plot with confidence interval on top of raw data    
+
+```{r}
+overlay_plot <- ggplot(nepali, aes(x=age, y=wt, group = id)) +
+  geom_line(aes(color=sex)) +
+  geom_point(aes(color=sex)) +
+  geom_line(
+    data = predictions_1, aes(x = x, y = predicted, group = group, color = group)
+    ) + 
+  geom_ribbon(
+    data = predictions_1,
+    aes(x = x, y=predicted, ymin = conf.low, ymax = conf.high, group = group, fill = group),
+    alpha = 0.3
+    ) 
+
+overlay_plot
+```
+
+-   Comparison with the original paper
+
+In the original paper, the aim of the researchers is to study the effect of vitamin A on early child growth. In the experiment they have randomly selected children, divided them into control and treatment groups. For the treatment group, they have provided vitamin A every 4 months for 16 months.
+
+The aim of my analysis was to understand the determinants of weight gain over time, I did not have any idea on the control and treatment groups. I am analyzing to find the determinants of weight over time for each child, not comparing the effect of a treatment ( Vitamin A ) between two groups.
+
+### Question 2
+
+-   Load the data
+
+```{r}
+data(Contraception, package = "mlmRev")
+```
+
+-   Plot the data
+
+```{r}
+cc <- Contraception %>% mutate(use_n=as.numeric(use)-1)
+
+cc_agg <- (
+  cc %>% group_by(livch,urban,age) %>% summarise(prop=mean(use_n), n=length(use), se=sqrt(prop*(1-prop)/n))
+)
+
+ggplot(cc_agg,aes(age,prop,colour=urban)) +
+  geom_pointrange(aes(ymin=prop-2*se, ymax=prop+2*se)) + 
+  facet_wrap(~livch,labeller=label_both)
+```
+I referred to "https://bbolker.github.io/stat4c03/notes/logistic.pdf" for the plot.
+
+-   Fitting a model
+
+Assuming that the effect of being in urban area on the use of contraception could vary between districts. The rational behind selecting these effects is assuming different districts could have different socioeconomic factors effecting the use of contraception. 
+
+```{r}
+# Converting Y and N to binary 1 and 0
+Contraception$use <- as.numeric(Contraception$use)-1
+```
+
+```{r}
+model_2 <- glmer(use ~ urban + age + livch +(urban|district), Contraception, binomial)
+```
+
+-   Residual plots
+
+```{r, fig.width=8, fig.height=12}
+check_model(model_2)
+```
+The QQ plot implies the model is binomial https://jtr13.github.io/EDAVold/qqplot.html .
+
+-   Model results
+
+```{r}
+summary(model_2)
+```
+
+From the fixed effect estimates we can say that living in an urban area has a an effect of 0.815187 on log odds of using contraception when other variables are kept constant, similarly age has a negative effect -0.026 on log odds of using contraception. We can interpret the living children variable (fixed effect) in a similar manner. Due to random effect the variance of effect of living in an urban area on contraception is 0.6419. 
+
+
+-   Plotting the model predictions
+
+```{r}
+predictions_2 <- ggpredict(model_2, terms = c("age[all]","urban"))
+print(predictions_2, n = Inf)
+
+plot(predictions_2)
+```
+- Overlay on raw data
+
+```{r}
+prediction_plot <- plot(predictions_2)
+
+overlay_contr_plot <- prediction_plot +
+  stat_sum(data=Contraception, aes(x = age, y = use, colour = urban), fill=NA) +
+  stat_summary(
+    data = Contraception, aes(x = age, y = use, colour = urban),fill=NA, geom="point", fun=mean
+    )
+
+overlay_contr_plot
+```
+
+-   Comparison with the original paper
+
+In the original paper they Use a multilevel discrete time hazards model, to identify the demographic and socioeconomic characteristics which influence the uptake of immunization. However, even after controlling for these observed factors, a considerable amount of variation between households remains due to unobserved characteristic.\["https://www.jstor.org/stable/pdf/2983175.pdf"\]
+
+We tried to model the data quite a similar way such that the factors like age, urban, number of children alive which might contribute to socioeconomic status, are taken care of. We also assumed that the effect of being in an urban area could vary between districts which makes sure that takes care of geographical variation.
+
+-   Coefficient plots comparing models
+
+```{r}
+# Complete pooling
+model_3 <- glm(use ~ urban + scale(age) + livch , data = Contraception , family = "binomial")
+
+# Quasi likelihood
+model_4 <- MASS:::glmmPQL(use ~ urban+scale(age)+livch,
+                     random = ~1|district,
+                     data = Contraception,
+                     family=binomial)
+
+# Laplace with single random effect
+model_5 <- glmer(use ~ urban+scale(age)+livch+(1|district), Contraception, binomial)
+
+# Gauss Hermite Quadrature
+model_6 <- update(model_5, nAGQ = 20)
+
+
+# Coefficient plot
+dwplot(
+  list(
+  Complete_Pooling = model_3,
+  Quasi_Liklihood = model_4,
+  Laplace = model_5,
+  Gauss_Hermite = model_6), 
+  effects="fixed"
+)
+```
+
+For the AGQ model, it throws me an error saying "nAGQ 1 is only available for models with a single, scalar random-effects term". So I created another model with only singular random effect as the Laplace model (this is different from my original model) and then update it with the AGQ method.
+
+The on an average effect of being in an urban area has a higher effect under complete pooling compared to other three methods. The average effect of age is also highest in the complete pooling but the other methods show a very similar effect for age. The average effect of number of living children is lowest for complete pooling followed by quasi likelihood method.
+
+### Question 3
+
+-   Loading packages to handle Bayesian MCMC
+
+```{r}
+library(rstanarm)
+library(bayestestR)
+library(bayesplot)
+library(brms)
+```
+
+-   Fitting the model with stan_lmer for the nepali dataset
+
+```{r}
+MCMC_1 <- stan_lmer(
+  wt ~ mage + died + alive + lit + age + sex + (1+age|id),
+  data = nepali, prior_PD = FALSE, chains = 4, seed = 101, refresh = 0
+)
+```
+- Diagnostics
+
+```{r}
+print(diagnostic_posterior(MCMC_1, effects = "all", parameters = "^Sigma"))
+```
+
+The Rhat values are less than 1.05, suggesting that there are no convergence issues. The ESS and MCSE values are also looks to be okay.
+
+```{r}
+color_scheme_set("viridis")
+mcmc_trace(MCMC_1, regex_pars= "Sigma")
+```
+
+```{r, fig.width=8, fig.height=12}
+check_model(MCMC_1)
+```
+
+
+The check model plots are similar to that of question 1. The trace plots shows a bit of white noise present, but overall the model looks okay.
+
+-   Estimates and confidence intervals from the stan_lmer model
+
+```{r}
+tidy(MCMC_1, conf.int = TRUE)
+```
+- overlaying predication CIs on raw data
+
+```{r}
+MCMC1_predictions <- ggpredict(MCMC_1, terms = c("age","sex"))
+plot(MCMC1_predictions)
+```
+```{r}
+overlay_plot2 <- ggplot(nepali, aes(x=age, y=wt, group = id)) +
+  geom_line(aes(color=sex)) +
+  geom_point(aes(color=sex)) +
+  geom_line(
+    data = MCMC1_predictions, aes(x = x, y = predicted, group = group, color = group)
+    ) + 
+  geom_ribbon(
+    data = MCMC1_predictions,
+    aes(x = x, y=predicted, ymin = conf.low, ymax = conf.high, group = group, fill = group),
+    alpha = 0.3
+    ) 
+
+overlay_plot2
+```
+
+- Fitting the model with brm for nepali dataset
+
+```{r}
+MCMC_2 <- brm(wt ~ mage + died + alive + lit + age + sex + (1+age|id),
+              data = nepali, seed = 101, chains = 4)
+```
+- Diagnostics
+
+```{r}
+print(diagnostic_posterior(MCMC_2), digits = 4)
+```
+
+Rhat, ESS and MCSE values seems to be okay. 
+
+```{r}
+color_scheme_set("viridis")
+mcmc_trace(MCMC_2, regex_pars= "b_|sd_")
+```
+
+```{r, fig.width=8, fig.height=12}
+check_model(MCMC_2)
+```
+
+In almost all trace plots, it can be seen that there is bit of white noise. The residual plots from the check model are quite similar to the ones from the first question. I will accept this model as there are no major concerns in these diagnostics
+
+- Estimates and confidence intervals
+
+```{r}
+tidy(MCMC_2, conf.int = TRUE, effects = "fixed")
+```
+
+- overlaying predication CIs on raw data
+
+```{r}
+MCMC2_predictions <- ggpredict(MCMC_2, terms = c("age","sex"))
+plot(MCMC2_predictions)
+```
+```{r}
+overlay_plot3 <- ggplot(nepali, aes(x=age, y=wt, group = id)) +
+  geom_line(aes(color=sex)) +
+  geom_point(aes(color=sex)) +
+  geom_line(
+    data = MCMC2_predictions, aes(x = x, y = predicted, group = group, color = group)
+    ) + 
+  geom_ribbon(
+    data = MCMC2_predictions,
+    aes(x = x, y=predicted, ymin = conf.low, ymax = conf.high, group = group, fill = group),
+    alpha = 0.3
+    ) 
+
+overlay_plot3
+```
+
+
+
+## Question 4
+
+-   simfun() function
+
+```{r}
+simfun <- function(beta, theta, n, ngrp){
+  
+  # Generate standard normal variate
+  x <- rnorm(n)
+  
+  # Create a grouping variable with ngrp levels
+  g <- factor(rep(1:ngrp, each = n/ngrp))
+  
+  # Create a dataframe
+  data_frame <- data.frame(x = x, g = g)
+  
+  # Simulating data
+  sim_data <- simulate(
+    ~1+x+(1|g), nsim = 1, newdata = data_frame, family = poisson,
+    newparams = list(beta=beta, theta=theta)
+    )
+  
+  # Add the simulated data to the dataframe
+  data_frame$y <- sim_data$sim_1
+  
+  return(data_frame)
+}
+```
+
+
+-   fitfun() function
+
+```{r}
+fitfun <- function(data, nAGQ){
+  
+  tryCatch({
+    # Apply if conditions for nAGQ values
+    if (nAGQ == -2) {
+      
+      # Fit with a glm
+      model <- glm(y ~ 1 + x, data = data, family = 'poisson')
+      coef <- coef(model)
+      cnf_int <- confint(model)
+      
+    } else if (nAGQ == -1){
+      
+      # Fit with a glmmPQL
+      model <- glmmPQL(y~1+x, random = ~1|g, data = data, family = poisson)
+      coef <- fixef(model)
+      cnf_int <- intervals(model, which = 'fixed')$fixed[,-2]
+      colnames(cnf_int) <- c('2.5 %','97.5 %')
+      
+    } else if (nAGQ >= 1){
+      
+      # Fit with glmer using Laplace (nAGQ=1) or AGHQ (nAGQ>1)
+      model <- glmer(y~1 + x + (1|g), data = data, family = poisson, nAGQ = nAGQ)
+      coef <- fixef(model)
+      cnf_int <- confint(model, parm="beta_", method = 'Wald')
+      
+    } else {
+      print('Invalid number of nAGQ parameter')
+    }
+    
+    return(list(coef, cnf_int))
+    
+  }, error=function(e){return(list(NA,NA))})
+  
+}
+```
+
+-   Creating a function to simulate the runs
+
+```{r}
+run_simulation <- function(beta, theta, n, ngrp, nAGQ) {
+  
+  # Generate data
+  data <- simfun(beta, theta, n, ngrp)
+
+  # Fit model
+  fit_results <- fitfun(data, nAGQ)
+
+  return(fit_results)
+}
+```
+
+-   A function to check if a column of a resultant matrix containing NAs
+
+```{r}
+has_na <- function(col) {
+  any(sapply(col, function(x) any(is.na(x))))
+}
+```
+
+-   Creating a function to remove NAs from a resultant matrix due to convergence errors
+
+```{r}
+remove_na_cols <- function(result_matrix){
+  
+  cols_with_na <- apply(result_matrix, 2, has_na)
+  final_matrix <- result_matrix[,!cols_with_na]
+  
+  return(final_matrix)
+}
+```
+
+-   Creating a function to calculate Bias, Variance, Scaled RMSE and coverage
+
+```{r}
+param_statistics <- function(result_matrix, beta){
+  
+  # Create vectors of length of a row in the result_matrix (omitting NAs)
+  result_length <- sum(!is.na(result_matrix[1,]))
+  
+  # Removing NA columns in the result_matrix
+  result_matrix <- remove_na_cols(result_matrix)
+  
+  intercept_estimates <- c(NA,result_length)
+  intercept_up <- c(NA,result_length)
+  intercept_lw <- c(NA,result_length)
+  slope_estimates <- c(NA,result_length)
+  slope_up <- c(NA,result_length)
+  slope_lw <- c(NA,result_length)
+  
+  
+  # Loop through result matrix columns
+  for (i in 1:result_length) {
+    
+    intercept_estimates[i] <- result_matrix[1,][[i]][[1]]
+    slope_estimates[i] <- result_matrix[1,][[i]][[2]]
+    intercept_up[i] <- result_matrix[2,][[i]][1,2]
+    intercept_lw[i] <- result_matrix[2,][[i]][1,1]
+    slope_up[i] <- result_matrix[2,][[i]][2,2]
+    slope_lw[i] <- result_matrix[2,][[i]][2,1]
+  }
+
+  # Calculating bias
+  slope_bias <- mean(slope_estimates) - beta[2]
+  
+  # Calculating variance
+  slope_var <- var(slope_estimates)
+  
+  # Calculating the scaled RMSE
+  slope_rmse <- sqrt(mean((slope_estimates/beta[2]-1)^2))
+  
+  # Calculating the coverage
+  slope_coverage <- mean((beta[2]>=slope_lw) & (beta[2]<=slope_up))
+  
+  cat('bias: ', slope_bias, "\n")
+  cat('variance: ', slope_var, "\n")
+  cat('scaled RMSE: ', slope_rmse, "\n")
+  cat('coverage: ', slope_coverage, "\n")
+  
+}
+```
+
+Initializing the arguments needed for the simulation
+
+```{r}
+beta1 <- c(-2, 0.5)
+beta2 <- c(2, 0.5)
+theta <- 1
+n <- 500
+ngrp <- 100
+```
+
+-   for beta 1 with nAGQ = -2
+
+```{r, message=FALSE}
+set.seed(3)
+results_beta1_glm <- replicate(100, run_simulation(beta1, theta, n, ngrp, -2))
+```
+
+-   for beta 1 with nAGQ = -1
+
+```{r, message=FALSE}
+set.seed(3)
+results_beta1_glmmPQL <- replicate(100, run_simulation(beta1, theta, n, ngrp, -1))
+```
+
+-   for beta 1 with nAGQ = 3
+
+```{r, message=FALSE}
+set.seed(3)
+results_beta1_glmer <- replicate(100, run_simulation(beta1, theta, n, ngrp, 3))
+```
+
+-   for beta 2 with nAGQ = -2
+
+```{r, message=FALSE}
+set.seed(10)
+results_beta2_glm <- replicate(100, run_simulation(beta2, theta, n, ngrp, -2))
+```
+
+-   for beta 2 with nAGQ = -1
+
+```{r, message=FALSE}
+set.seed(10)
+results_beta2_glmmPQL <- replicate(100, run_simulation(beta2, theta, n, ngrp, -1))
+```
+
+-   for beta 2 with nAGQ = 3
+
+```{r, message=FALSE}
+set.seed(10)
+results_beta2_glmer <- replicate(100, run_simulation(beta2, theta, n, ngrp, 3))
+```
+
+-   Bias, variance, RMSE and coverage for glm under beta1
+
+```{r}
+cat("RESULTS FOR PATAMETER SET 1 UNDER GLM \n\n")
+param_statistics(results_beta1_glm, beta1)
+```
+
+-   Bias, variance, RMSE and coverage for glmmPQL under beta1
+
+```{r}
+cat("RESULTS FOR PATAMETER SET 1 UNDER GLMM PQL \n\n")
+param_statistics(results_beta1_glmmPQL, beta1)
+```
+
+-   Bias, variance, RMSE and coverage for nAGQ = 3 under beta1
+
+```{r}
+cat("RESULTS FOR PATAMETER SET 1 UNDER GLM nAGQ \n\n")
+param_statistics(results_beta1_glmer, beta1)
+```
+
+-   Bias, variance, RMSE and coverage for glm under beta2
+
+```{r}
+cat("RESULTS FOR PATAMETER SET 2 UNDER GLM \n\n")
+param_statistics(results_beta2_glm, beta2)
+```
+
+-   Bias, variance, RMSE and coverage for glmmPQL under beta2
+
+```{r}
+cat("RESULTS FOR PATAMETER SET 2 UNDER GLMM PQL \n\n")
+param_statistics(results_beta2_glmmPQL, beta2)
+```
+
+-   Bias, variance, RMSE and coverage for nAGQ = 3 under beta2
+
+```{r}
+cat("RESULTS FOR PATAMETER SET 2 UNDER GLM nAGQ\n\n")
+param_statistics(results_beta2_glmer, beta2)
+```
