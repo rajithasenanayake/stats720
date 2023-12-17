@@ -1,0 +1,261 @@
+---
+title: "Assignment 5"
+author: "Rajitha Senanayake"
+format: pdf
+editor: visual
+---
+
+# I collaborated with Ramkrishna Samanta
+
+## Import packages
+
+```{r}
+library(mgcv)
+library(lme4)
+library(broom)
+library(broom.mixed)
+library(dotwhisker)
+library(ggeffects)
+library(ggnewscale)
+```
+
+-   Loading the dataset and transform the variables as required
+
+```{r}
+data("Contraception", package = "mlmRev")
+
+Contraception <- transform(
+  Contraception,
+  use = as.numeric(use) - 1,
+  age = scale(age)
+)
+```
+
+## Question 1
+
+-   Fitting the models
+
+```{r}
+# Using glmer
+model_1 <- glmer(use ~ age + urban + age:urban + (1|district), data = Contraception, binomial)
+
+# Using gam
+model_2 <- gam(
+  use ~ age + urban + age:urban + s(district, bs = 're'), data = Contraception,family = 'binomial'
+)
+```
+
+-   Summary of the estimates and standard errors of the fixed effects
+
+```{r}
+# Summary of glmer model
+tidy(model_1, effect = "fixed")
+```
+
+```{r}
+# Summary of gam model
+tidy(model_2, parametric = TRUE)
+```
+
+```{r}
+dwplot(
+  list(glmer = model_1, gam = model_2),
+  vars_order = c("age", "urbanY", "age:urbanY"),
+)
+```
+
+The estimates and standard errors of age and urbanY are higher in the glmer model compared to GAM but for the interaction term estimate is higher in the GAM model and the standard error is higher in the glmer model. Overall the two models have similar coefficient estimates and standard errors for non smoothing/fixed coefficients.
+
+## Question 2
+
+-   Fitting the models
+
+```{r}
+# Model with quadratic function
+model_3 <- gam(
+  use ~ urban + poly(age, 2) + s(district, bs = 're'), data = Contraception, family = "binomial"
+)
+
+# Model with thin plate spline
+model_4 <- gam(
+  use ~ urban + s(age, bs = "tp") + s(district, bs = 're'), data = Contraception, family = "binomial"
+)
+```
+
+-   Function required for the plot
+
+```{r}
+binom_sum <- function(x, alpha = 0.05) {
+    n <- length(x); x <- sum(x)
+    est <- x/n
+    lwr <- qbeta(alpha/2, x, n-x+1)
+    zvals <- !is.na(x) & x == 0
+    nvals <- !is.na(x) & x == n
+    lwr[zvals] <- 0
+    lwr[nvals] <- (alpha/2)^(1/n[nvals])
+    upr <- qbeta(1-alpha/2, x+1, n-x)
+    upr[zvals] <- 1-(alpha/2)^(1/n[zvals])
+    upr[nvals] <- 1
+    data.frame(y=est, ymin=lwr, ymax=upr)
+}
+
+ssb <- ggplot2::stat_summary_bin(data = Contraception,
+                            fun.data = binom_sum,
+                            bins = 10,
+                            geom = "pointrange",
+                            ## displace urban/rural bars slightly
+                            position = ggplot2::position_dodge(width = 0.05),
+                            mapping = ggplot2::aes(x = age, y = use, colour = urban),
+                            fill = NA)
+```
+
+-   Plotting the predictions on raw data
+
+```{r}
+df_1 <- ggemmeans(model_3, terms = c("age [all]", "urban"))
+df_2 <- ggemmeans(model_4, terms = c("age [all]", "urban"))
+
+ggplot(Contraception, aes(x=age, y=use)) +
+  geom_line(
+    data = df_1, aes(x = x, y = predicted, group = group, color = group)
+    ) + 
+  scale_color_manual(values=c("red","blue"), labels = c("model 3 urban: N","model 3 urban: Y")) +
+  geom_ribbon(
+    data = df_1,
+    aes(x = x, y=predicted, ymin = conf.low, ymax = conf.high, group = group, fill = group),
+    alpha = 0.5
+    ) +
+  scale_fill_manual(values=c("red","blue"), labels = c("model 3 urban: N","model 3 urban: Y")) +
+  new_scale_fill() +
+  new_scale_color() +
+  geom_line(
+    data = df_2, aes(x = x, y = predicted, group = group, color = group), alpha = 5
+    ) + 
+  scale_color_manual(values = c("#9933CC","#003666"),labels = c("model 4 urban: N","model 4 urban: Y"))+
+  geom_ribbon(
+    data = df_2,
+    aes(x = x, y=predicted, ymin = conf.low, ymax = conf.high, group = group, fill = group),
+    alpha = 0.4
+    ) +
+  scale_fill_manual(values=c("#FF00CC","#3399FF"), labels = c("model 4 urban: N","model 4 urban: Y")) +
+  new_scale_color() +
+  ssb
+```
+
+```{r}
+plot(df_1)
+plot(df_2)
+```
+
+The confidence intervals of the 4th model seems to be wider compared to the 3rd model at two ends. We can also see from the following plots that the interval of log odds of using contraception in case of Urban Y is higher than that of the interval of Urban N at the center (around the mean of age) but there is a slight overlap at the two tails for the both models.
+
+## Question 3
+
+-   Fitting the models
+
+```{r}
+# Model with quadratic function and interaction
+model_5 <- gam(
+  use ~ urban + poly(age,2) + poly(age, 2):urban + s(district, bs = 're'), data = Contraception, family = "binomial"
+)
+
+# Model with thin plate spline and interaction
+model_6 <- gam(
+  use ~ urban + s(age, bs = "tp", by = urban) + s(district, bs = 're'), data = Contraception, family = "binomial"
+)
+```
+
+-   Plotting the predictions on raw data
+
+```{r}
+df_3 <- ggemmeans(model_5, terms = c("age [all]", "urban"))
+df_4 <- ggemmeans(model_6, terms = c("age [all]", "urban"))
+
+ggplot(Contraception, aes(x=age, y=use)) +
+  geom_line(
+    data = df_3, aes(x = x, y = predicted, group = group, color = group)
+    ) + 
+  scale_color_manual(values=c("red","blue"), labels = c("model 5 urban: N","model 5 urban: Y")) +
+  geom_ribbon(
+    data = df_3,
+    aes(x = x, y=predicted, ymin = conf.low, ymax = conf.high, group = group, fill = group),
+    alpha = 0.5
+    ) +
+  scale_fill_manual(values=c("red","blue"), labels = c("model 5 urban: N","model 5 urban: Y")) +
+  new_scale_fill() +
+  new_scale_color() +
+  geom_line(
+    data = df_4, aes(x = x, y = predicted, group = group, color = group), alpha = 5
+    ) + 
+  scale_color_manual(values = c("#9933CC","#003666"),labels = c("model 6 urban: N","model 6 urban: Y"))+
+  geom_ribbon(
+    data = df_4,
+    aes(x = x, y=predicted, ymin = conf.low, ymax = conf.high, group = group, fill = group),
+    alpha = 0.4
+    ) +
+  scale_fill_manual(values=c("#FF00CC","#3399FF"), labels = c("model 6 urban: N","model 6 urban: Y")) +
+  new_scale_color() +
+  ssb
+```
+
+```{r}
+plot(df_3)
+plot(df_4)
+```
+
+The confidence intervals of the 6th model are wider at the ends compared to that of the 5th model.There is more overlapping in confidence intervals of urban Y and urban N for the 6th model. We see that the log of odds of using contraception in case of Urban Y is always higher around the center (mean of age) than that of Urban N for the both models.
+
+## Question 4
+
+```{r}
+model_7 <- glmer(use ~ urban + poly(age,2):urban + (poly(age,2)|district), data = Contraception, binomial)
+model_8 <- gam(
+  use ~ urban + s(age, bs = "tp", by = urban) + s(age, district, bs = 'fs'), data = Contraception, family = "binomial"
+  )
+```
+
+-   Creating a data frame to predict
+
+```{r}
+nd <- with(Contraception,
+           expand.grid(urban = levels(urban),
+                       age = unique(age),
+                       district = unique(district)))
+```
+
+-   Predicting with the new data frame
+
+```{r}
+predictions_1 <- predict(model_7, newdata = nd)
+predictions_2 <- predict(model_8, newdata = nd)
+
+# Combine the predictions to the dataframe
+nd <- cbind(nd,predictions_1, predictions_2)
+```
+
+-   Plot of model 7
+
+```{r}
+ggplot(nd,aes(x=age))+
+  geom_line(aes(x=age, y=predictions_1, group = interaction(urban,district), color = urban))
+```
+
+-   plot of model 8
+
+```{r}
+ggplot(nd,aes(x=age))+
+  geom_line(aes(x=age, y=predictions_2, group = interaction(urban,district), color= urban)) 
+```
+
+-   Plot of both models
+
+```{r}
+ggplot(nd,aes(x=age))+
+  geom_line(aes(x=age, y=predictions_1, group = interaction(urban,district), color = "#3399FF")) +
+  geom_line(aes(x=age, y=predictions_2, group = interaction(urban,district), color= "#FF00CC")) +
+  scale_colour_manual(name = 'the colour', 
+         values =c('#3399FF'='#3399FF','#FF00CC'='#FF00CC'), labels = c("model_7","model_8")) +
+  labs(y='Predictions', x='Age')
+```
+
+At an overall level we can see that the prediction of log odds of using contraception is lower at the higher end of the age for some districts in model 7 compared to model 8. At the center (around the mean of age) for two districts, we can see lower predictions for model 8 compared to model 7.
