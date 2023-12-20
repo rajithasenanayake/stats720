@@ -164,6 +164,8 @@ Contraception$use <- as.numeric(Contraception$use)-1
 model_2 <- glmer(use ~ urban + age + livch +(urban|district), Contraception, binomial)
 ```
 
+BMB: probably want to consider effect of age varying across district too?
+
 -   Residual plots
 
 ```{r, fig.width=8, fig.height=12}
@@ -255,7 +257,7 @@ library(brms)
 
 -   Fitting the model with stan_lmer for the nepali dataset
 
-```{r}
+```{r stan1, cache=TRUE}
 MCMC_1 <- stan_lmer(
   wt ~ mage + died + alive + lit + age + sex + (1+age|id),
   data = nepali, prior_PD = FALSE, chains = 4, seed = 101, refresh = 0
@@ -310,7 +312,7 @@ overlay_plot2
 
 - Fitting the model with brm for nepali dataset
 
-```{r}
+```{r brm1, cache=TRUE}
 MCMC_2 <- brm(wt ~ mage + died + alive + lit + age + sex + (1+age|id),
               data = nepali, seed = 101, chains = 4)
 ```
@@ -530,42 +532,42 @@ ngrp <- 100
 
 -   for beta 1 with nAGQ = -2
 
-```{r, message=FALSE}
+```{r runsim1, cache=TRUE, message=FALSE}
 set.seed(3)
 results_beta1_glm <- replicate(100, run_simulation(beta1, theta, n, ngrp, -2))
 ```
 
 -   for beta 1 with nAGQ = -1
 
-```{r, message=FALSE}
+```{r runsim2, cache=TRUE, message=FALSE}
 set.seed(3)
 results_beta1_glmmPQL <- replicate(100, run_simulation(beta1, theta, n, ngrp, -1))
 ```
 
 -   for beta 1 with nAGQ = 3
 
-```{r, message=FALSE}
+```{r runsim3, cache=TRUE, message=FALSE}
 set.seed(3)
 results_beta1_glmer <- replicate(100, run_simulation(beta1, theta, n, ngrp, 3))
 ```
 
 -   for beta 2 with nAGQ = -2
 
-```{r, message=FALSE}
+```{r runsim4, cache=TRUE, message=FALSE}
 set.seed(10)
 results_beta2_glm <- replicate(100, run_simulation(beta2, theta, n, ngrp, -2))
 ```
 
 -   for beta 2 with nAGQ = -1
 
-```{r, message=FALSE}
+```{r cache=TRUE, message=FALSE}
 set.seed(10)
 results_beta2_glmmPQL <- replicate(100, run_simulation(beta2, theta, n, ngrp, -1))
 ```
 
 -   for beta 2 with nAGQ = 3
 
-```{r, message=FALSE}
+```{r cache=TRUE, message=FALSE}
 set.seed(10)
 results_beta2_glmer <- replicate(100, run_simulation(beta2, theta, n, ngrp, 3))
 ```
@@ -573,41 +575,41 @@ results_beta2_glmer <- replicate(100, run_simulation(beta2, theta, n, ngrp, 3))
 -   Bias, variance, RMSE and coverage for glm under beta1
 
 ```{r}
-cat("RESULTS FOR PATAMETER SET 1 UNDER GLM \n\n")
+cat("RESULTS FOR PARAMETER SET 1 UNDER GLM \n\n")
 param_statistics(results_beta1_glm, beta1)
 ```
 
 -   Bias, variance, RMSE and coverage for glmmPQL under beta1
 
 ```{r}
-cat("RESULTS FOR PATAMETER SET 1 UNDER GLMM PQL \n\n")
+cat("RESULTS FOR PARAMETER SET 1 UNDER GLMM PQL \n\n")
 param_statistics(results_beta1_glmmPQL, beta1)
 ```
 
 -   Bias, variance, RMSE and coverage for nAGQ = 3 under beta1
 
 ```{r}
-cat("RESULTS FOR PATAMETER SET 1 UNDER GLM nAGQ \n\n")
+cat("RESULTS FOR PARAMETER SET 1 UNDER GLM nAGQ \n\n")
 param_statistics(results_beta1_glmer, beta1)
 ```
 
 -   Bias, variance, RMSE and coverage for glm under beta2
 
 ```{r}
-cat("RESULTS FOR PATAMETER SET 2 UNDER GLM \n\n")
+cat("RESULTS FOR PARAMETER SET 2 UNDER GLM \n\n")
 param_statistics(results_beta2_glm, beta2)
 ```
 
 -   Bias, variance, RMSE and coverage for glmmPQL under beta2
 
 ```{r}
-cat("RESULTS FOR PATAMETER SET 2 UNDER GLMM PQL \n\n")
+cat("RESULTS FOR PARAMETER SET 2 UNDER GLMM PQL \n\n")
 param_statistics(results_beta2_glmmPQL, beta2)
 ```
 
 -   Bias, variance, RMSE and coverage for nAGQ = 3 under beta2
 
 ```{r}
-cat("RESULTS FOR PATAMETER SET 2 UNDER GLM nAGQ\n\n")
+cat("RESULTS FOR PARAMETER SET 2 UNDER GLM nAGQ\n\n")
 param_statistics(results_beta2_glmer, beta2)
 ```
